@@ -176,77 +176,82 @@ with st.container():
         if not st.session_state['show_all_papers'] and len(filtered_df) > top_n:
             if st.button('View All Papers'):
                 st.session_state['show_all_papers'] = True
+                # Ensure selected paper is valid after rerun
+                if 'selected_paper' not in st.session_state or st.session_state['selected_paper'] not in dropdown_options:
+                    st.session_state['selected_paper'] = dropdown_options[0] if len(dropdown_options) > 0 else None
                 st.experimental_rerun()
         elif st.session_state['show_all_papers'] and len(filtered_df) > top_n:
             if st.button('Show Less'):
                 st.session_state['show_all_papers'] = False
+                if 'selected_paper' not in st.session_state or st.session_state['selected_paper'] not in dropdown_options:
+                    st.session_state['selected_paper'] = dropdown_options[0] if len(dropdown_options) > 0 else None
                 st.experimental_rerun()
         dropdown_options = display_df['Paper Title'] + " (" + display_df['Paper ID'] + ")"
-        selected_paper = st.selectbox("Select a paper for details:", dropdown_options, key="paper_select")
+        # Preserve selected paper across reruns
+        if 'selected_paper' not in st.session_state or st.session_state['selected_paper'] not in dropdown_options:
+            st.session_state['selected_paper'] = dropdown_options[0] if len(dropdown_options) > 0 else None
+        selected_paper = st.selectbox("Select a paper for details:", dropdown_options, key="paper_select", index=dropdown_options.index(st.session_state['selected_paper']) if st.session_state['selected_paper'] in dropdown_options else 0)
+        st.session_state['selected_paper'] = selected_paper
     with tcol2:
-        if selected_paper:
-            selected_id = selected_paper.split("(")[-1].replace(")", "").strip()
-            selected_paper_data = filtered_df[filtered_df['Paper ID'] == selected_id].iloc[0]
-            if 'show_full_scorecard' not in st.session_state:
-                st.session_state['show_full_scorecard'] = False
-            st.markdown(f"<div style='background:#f8fafc;padding:1.5rem 1.5rem 1rem 1.5rem;border-radius:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.04);'>", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='margin-bottom:0.5rem;'>{selected_paper_data['Paper Title']}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Paper ID:</span> {selected_paper_data['Paper ID']}  ", unsafe_allow_html=True)
-            st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Conference:</span> {selected_paper_data.get('Conference', 'N/A')}  ", unsafe_allow_html=True)
-            st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Overall Score:</span> {selected_paper_data['Overall Score (100)']}/100  ", unsafe_allow_html=True)
-            # Status chip
-            status_color = {'Highly Reproducible':'#22c55e','Partially Reproducible':'#facc15','Issues Present':'#f97316','Not Reproducible':'#ef4444'}
-            st.markdown(f"<span style='padding:0.3em 0.9em;border-radius:1em;background:{status_color.get(selected_paper_data['Overall Status'],'#e5e7eb')};color:#fff;font-weight:600;margin-right:0.5em;'>{selected_paper_data['Overall Status']}</span>", unsafe_allow_html=True)
-            # Overall score progress bar
-            st.progress(selected_paper_data['Overall Score (100)'] / 100)
-            st.markdown(f"<a href='{selected_paper_data.get('Paper Link', '#')}' target='_blank'>View Paper</a> | <a href='{selected_paper_data.get('Code Link', '#')}' target='_blank'>View Code</a>", unsafe_allow_html=True)
-            # Concise by default, expandable for full details
-            if not st.session_state['show_full_scorecard']:
-                if st.button('View Full Scorecard'):
-                    st.session_state['show_full_scorecard'] = True
-                    st.experimental_rerun()
+        try:
+            if st.session_state['selected_paper']:
+                selected_id = st.session_state['selected_paper'].split("(")[-1].replace(")", "").strip()
+                # Only show details if the paper exists in the filtered DataFrame
+                if selected_id in filtered_df['Paper ID'].values:
+                    selected_paper_data = filtered_df[filtered_df['Paper ID'] == selected_id].iloc[0]
+                    st.markdown(f"<div style='background:#f8fafc;padding:1.5rem 1.5rem 1rem 1.5rem;border-radius:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.04);'>", unsafe_allow_html=True)
+                    st.markdown(f"<h3 style='margin-bottom:0.5rem;'>{selected_paper_data['Paper Title']}</h3>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Paper ID:</span> {selected_paper_data['Paper ID']}  ", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Conference:</span> {selected_paper_data.get('Conference', 'N/A')}  ", unsafe_allow_html=True)
+                    st.markdown(f"<span style='font-size:1.1rem;font-weight:600;'>Overall Score:</span> {selected_paper_data['Overall Score (100)']}/100  ", unsafe_allow_html=True)
+                    # Status chip
+                    status_color = {'Highly Reproducible':'#22c55e','Partially Reproducible':'#facc15','Issues Present':'#f97316','Not Reproducible':'#ef4444'}
+                    st.markdown(f"<span style='padding:0.3em 0.9em;border-radius:1em;background:{status_color.get(selected_paper_data['Overall Status'],'#e5e7eb')};color:#fff;font-weight:600;margin-right:0.5em;'>{selected_paper_data['Overall Status']}</span>", unsafe_allow_html=True)
+                    # Overall score progress bar
+                    st.progress(selected_paper_data['Overall Score (100)'] / 100)
+                    st.markdown(f"<a href='{selected_paper_data.get('Paper Link', '#')}' target='_blank'>View Paper</a> | <a href='{selected_paper_data.get('Code Link', '#')}' target='_blank'>View Code</a>", unsafe_allow_html=True)
+                    st.markdown("<hr style='margin:1rem 0;'>", unsafe_allow_html=True)
+                    st.markdown("<b>Score Breakdown by Category:</b>", unsafe_allow_html=True)
+                    max_scores = {
+                        'Code & Environment Score': 100,
+                        'Documentation & Transparency Score': 100,
+                        'Data & Model Reuse Score': 100,
+                        'Community Engagement Score': 100
+                    }
+                    for category_col, max_pts in max_scores.items():
+                        if category_col in selected_paper_data.index:
+                            score = selected_paper_data[category_col]
+                            pct = int((score/max_pts)*100) if max_pts else 0
+                            st.markdown(f"<div style='margin-bottom:0.5rem;'><b>{category_col.replace(' Score','')}:</b> {score}/{max_pts} <span style='color:#6366f1;font-weight:600;'>({pct}%)</span></div>", unsafe_allow_html=True)
+                            st.progress(score / max_pts)
+                        else:
+                            st.write(f"{category_col.replace(' Score', '')}: Data not available.")
+                    st.markdown("<b>Detailed Notes:</b>", unsafe_allow_html=True)
+                    note_display_map = {
+                        "Paper Availability Notes": "Paper Availability",
+                        "Code Availability Notes": "Code & Environment",
+                        "Dataset Availability Notes": "Data & Model Reuse",
+                        "Documentation Quality Notes": "Documentation & Transparency",
+                        "Computer Requirements Notes": "Computer Requirements",
+                        "GPU Requirements Notes": "GPU Requirements",
+                        "Ease of Setup Notes": "Ease of Setup",
+                        "Reproducibility Notes": "Overall Reproducibility",
+                        "Overall Rating Notes": "Overall Rating"
+                    }
+                    found_notes = False
+                    for note_col, display_name in note_display_map.items():
+                        if note_col in selected_paper_data.index and pd.notna(selected_paper_data[note_col]) and selected_paper_data[note_col] != "":
+                            st.markdown(f"<div style='margin-bottom:0.3rem;'><b>{display_name}:</b> <span style='color:#334155;'>{selected_paper_data[note_col]}</span></div>", unsafe_allow_html=True)
+                            found_notes = True
+                    if not found_notes:
+                        st.info("No detailed notes available for this paper in the current data.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.info("Selected paper is not available in the current filter. Please select another paper.")
             else:
-                st.markdown("<hr style='margin:1rem 0;'>", unsafe_allow_html=True)
-                st.markdown("<b>Score Breakdown by Category:</b>", unsafe_allow_html=True)
-                max_scores = {
-                    'Code & Environment Score': 100,
-                    'Documentation & Transparency Score': 100,
-                    'Data & Model Reuse Score': 100,
-                    'Community Engagement Score': 100
-                }
-                for category_col, max_pts in max_scores.items():
-                    if category_col in selected_paper_data.index:
-                        score = selected_paper_data[category_col]
-                        pct = int((score/max_pts)*100) if max_pts else 0
-                        st.markdown(f"<div style='margin-bottom:0.5rem;'><b>{category_col.replace(' Score','')}:</b> {score}/{max_pts} <span style='color:#6366f1;font-weight:600;'>({pct}%)</span></div>", unsafe_allow_html=True)
-                        st.progress(score / max_pts)
-                    else:
-                        st.write(f"{category_col.replace(' Score', '')}: Data not available.")
-                st.markdown("<b>Detailed Notes:</b>", unsafe_allow_html=True)
-                note_display_map = {
-                    "Paper Availability Notes": "Paper Availability",
-                    "Code Availability Notes": "Code & Environment",
-                    "Dataset Availability Notes": "Data & Model Reuse",
-                    "Documentation Quality Notes": "Documentation & Transparency",
-                    "Computer Requirements Notes": "Computer Requirements",
-                    "GPU Requirements Notes": "GPU Requirements",
-                    "Ease of Setup Notes": "Ease of Setup",
-                    "Reproducibility Notes": "Overall Reproducibility",
-                    "Overall Rating Notes": "Overall Rating"
-                }
-                found_notes = False
-                for note_col, display_name in note_display_map.items():
-                    if note_col in selected_paper_data.index and pd.notna(selected_paper_data[note_col]) and selected_paper_data[note_col] != "":
-                        st.markdown(f"<div style='margin-bottom:0.3rem;'><b>{display_name}:</b> <span style='color:#334155;'>{selected_paper_data[note_col]}</span></div>", unsafe_allow_html=True)
-                        found_notes = True
-                if not found_notes:
-                    st.info("No detailed notes available for this paper in the current data.")
-                if st.button('Show Less Scorecard'):
-                    st.session_state['show_full_scorecard'] = False
-                    st.experimental_rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.info("Select a paper from the dropdown to view its detailed scorecard.")
+                st.info("Select a paper from the dropdown to view its detailed scorecard.")
+        except Exception as e:
+            st.error(f"An error occurred displaying the paper details: {e}")
 
 st.markdown("<hr style='margin:2rem 0;'>", unsafe_allow_html=True)
 
