@@ -45,6 +45,10 @@ def load_data():
     def parse_notes(s):
         m = re.search(r'Notes:\s*(.*)', str(s))
         return m.group(1).strip() if m else ''
+    def extract_first_github_url(notes):
+        # Extract the first GitHub repo URL from the notes string
+        matches = re.findall(r'https?://github.com/[^,\s]+', str(notes))
+        return matches[0] if matches else 'N/A'
 
     score_cols = [
         ('Paper Availability', 'Paper Availability'),
@@ -66,12 +70,12 @@ def load_data():
             df[f'{short} Notes'] = ''
 
     # --- Step 3: Main Category Scores (example mapping, adjust as needed) ---
-    code_env_max = 5
-    docs_max = 2
-    data_model_max = 2
-    community_max = 1
-    df['Code & Environment Score'] = df['Code Availability Score'] + df['Computer Requirements Score'] + df['GPU Requirements Score']
-    df['Documentation & Transparency Score'] = df['Documentation Quality Score'] + df['Ease of Setup Score']
+    code_env_max = 4
+    docs_max = 4
+    data_model_max = 4
+    community_max = 4
+    df['Code & Environment Score'] = df['Code Availability Score']
+    df['Documentation & Transparency Score'] = df['Documentation Quality Score']
     df['Data & Model Reuse Score'] = df['Dataset Availability Score']
     df['Community Engagement Score'] = 0  # Not in CSV, placeholder
     # Calculate overall score as sum of main categories, normalized to 100
@@ -81,7 +85,7 @@ def load_data():
         df['Data & Model Reuse Score'] +
         df['Community Engagement Score']
     )
-    max_total = code_env_max + docs_max + data_model_max + community_max
+    max_total = code_env_max + docs_max + data_model_max + community_max  # 16
     df['Overall Score (100)'] = (df['Overall Score (Raw)'] / max_total * 100).round(1)
     # Status logic: 80+ = Highly, 50-79 = Partially, 20-49 = Issues, 0-19 = Not
     def status_from_score(score):
@@ -96,7 +100,7 @@ def load_data():
     df['Overall Status'] = df['Overall Score (100)'].apply(status_from_score)
     df['Conference'] = ['ICSE 2023', 'SC24'] * (len(df) // 2) + ['ICSE 2023'] * (len(df) % 2)
     df['Paper Link'] = df['Paper ID'].apply(lambda x: f"https://example.com/papers/{x}.pdf")
-    df['Code Link'] = df['Code Availability Notes'].apply(lambda x: re.search(r'https?://\S+', x).group(0) if re.search(r'https?://\S+', x) else 'N/A')
+    df['Code Link'] = df['Code Availability Notes'].apply(extract_first_github_url)
     return df
 
 df = load_data()
@@ -209,23 +213,62 @@ with st.container():
                     st.markdown(f"<span style='padding:0.3em 0.9em;border-radius:1em;background:{status_color.get(selected_paper_data['Overall Status'],'#e5e7eb')};color:#fff;font-weight:600;margin-right:0.5em;'>{selected_paper_data['Overall Status']}</span>", unsafe_allow_html=True)
                     # Overall score progress bar
                     st.progress(selected_paper_data['Overall Score (100)'] / 100)
-                    st.markdown(f"<a href='{selected_paper_data.get('Paper Link', '#')}' target='_blank'>View Paper</a> | <a href='{selected_paper_data.get('Code Link', '#')}' target='_blank'>View Code</a>", unsafe_allow_html=True)
+                    st.markdown(f"<a href='{selected_paper_data.get('Code Link', '#')}' target='_blank'>View GitHub Repository for this Paper</a>", unsafe_allow_html=True)
                     st.markdown("<hr style='margin:1rem 0;'>", unsafe_allow_html=True)
                     st.markdown("<b>Score Breakdown by Category:</b>", unsafe_allow_html=True)
                     max_scores = {
-                        'Code & Environment Score': 100,
-                        'Documentation & Transparency Score': 100,
-                        'Data & Model Reuse Score': 100,
-                        'Community Engagement Score': 100
+                        'Code & Environment Score': 4,
+                        'Documentation & Transparency Score': 4,
+                        'Data & Model Reuse Score': 4,
+                        'Community Engagement Score': 4
                     }
-                    for category_col, max_pts in max_scores.items():
-                        if category_col in selected_paper_data.index:
-                            score = selected_paper_data[category_col]
-                            pct = int((score/max_pts)*100) if max_pts else 0
-                            st.markdown(f"<div style='margin-bottom:0.5rem;'><b>{category_col.replace(' Score','')}:</b> {score}/{max_pts} <span style='color:#6366f1;font-weight:600;'>({pct}%)</span></div>", unsafe_allow_html=True)
-                            st.progress(score / max_pts)
-                        else:
-                            st.write(f"{category_col.replace(' Score', '')}: Data not available.")
+                    categories = list(max_scores.keys())
+                    # First row (first two categories)
+                    cols1 = st.columns(2)
+                    for idx in range(2):
+                        category_col = categories[idx]
+                        max_pts = max_scores[category_col]
+                        with cols1[idx]:
+                            if category_col in selected_paper_data.index:
+                                score = selected_paper_data[category_col]
+                                pct = int((score/max_pts)*100) if max_pts else 0
+                                st.markdown(f"<div style='background-color:#f8fafc;padding:1.1rem 0.7rem 0.7rem 0.7rem;border-radius:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.04);min-width:150px;text-align:center;'>"
+                                            f"<div style='font-size:1.08rem;font-weight:700;margin-bottom:0.3rem;color:#334155;'>"
+                                            f"{category_col.replace(' Score','')}" 
+                                            f"</div>"
+                                            f"<div style='font-size:1.1rem;font-weight:600;margin-bottom:0.2rem;'>{score}/{max_pts} <span style='color:#6366f1;font-weight:600;'>({pct}%)</span></div>"
+                                            f"</div>", unsafe_allow_html=True)
+                                st.progress(score / max_pts)
+                            else:
+                                st.markdown(f"<div style='background-color:#f8fafc;padding:1.1rem 0.7rem 0.7rem 0.7rem;border-radius:1rem;min-width:150px;text-align:center;'>"
+                                            f"<div style='font-size:1.08rem;font-weight:700;margin-bottom:0.3rem;color:#334155;'>"
+                                            f"{category_col.replace(' Score','')}" 
+                                            f"</div>"
+                                            f"<div>Data not available.</div>"
+                                            f"</div>", unsafe_allow_html=True)
+                    # Second row (last two categories)
+                    cols2 = st.columns(2)
+                    for idx in range(2, 4):
+                        category_col = categories[idx]
+                        max_pts = max_scores[category_col]
+                        with cols2[idx-2]:
+                            if category_col in selected_paper_data.index:
+                                score = selected_paper_data[category_col]
+                                pct = int((score/max_pts)*100) if max_pts else 0
+                                st.markdown(f"<div style='background-color:#f8fafc;padding:1.1rem 0.7rem 0.7rem 0.7rem;border-radius:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.04);min-width:150px;text-align:center;'>"
+                                            f"<div style='font-size:1.08rem;font-weight:700;margin-bottom:0.3rem;color:#334155;'>"
+                                            f"{category_col.replace(' Score','')}" 
+                                            f"</div>"
+                                            f"<div style='font-size:1.1rem;font-weight:600;margin-bottom:0.2rem;'>{score}/{max_pts} <span style='color:#6366f1;font-weight:600;'>({pct}%)</span></div>"
+                                            f"</div>", unsafe_allow_html=True)
+                                st.progress(score / max_pts)
+                            else:
+                                st.markdown(f"<div style='background-color:#f8fafc;padding:1.1rem 0.7rem 0.7rem 0.7rem;border-radius:1rem;min-width:150px;text-align:center;'>"
+                                            f"<div style='font-size:1.08rem;font-weight:700;margin-bottom:0.3rem;color:#334155;'>"
+                                            f"{category_col.replace(' Score','')}" 
+                                            f"</div>"
+                                            f"<div>Data not available.</div>"
+                                            f"</div>", unsafe_allow_html=True)
                     st.markdown("<b>Detailed Notes:</b>", unsafe_allow_html=True)
                     note_display_map = {
                         "Paper Availability Notes": "Paper Availability",
@@ -277,22 +320,56 @@ with st.container():
 
 st.markdown("<hr style='margin:2rem 0;'>", unsafe_allow_html=True)
 
+# --- Scorecard Metrics Explained Section ---
+with st.expander('ℹ️ About the Scorecard Metrics', expanded=True):
+    st.markdown('''
+    **How We Assess Reproducibility:**
+    - **Code & Environment:** Is the code available, runnable, and well-documented? Is the environment (e.g., dependencies) clearly specified?
+    - **Documentation & Transparency:** Are there clear instructions, a comprehensive README, and transparent reporting of methods?
+    - **Data & Model Reuse:** Is the data findable, usable, and properly licensed? Are model weights or checkpoints available?
+    - **Community Engagement:** Is there evidence of issue tracking, discussion forums, or community support?
+    
+    Each category is scored from 1 (lowest) to 4 (highest). The overall score is normalized to 100.
+    ''')
+
 # --- About Section ---
-st.markdown("<h3 style='margin-bottom:0.5rem;'>About CodeRunners</h3>", unsafe_allow_html=True)
-st.markdown("""
-This project aims to evaluate and compare the reproducibility of 189 papers from ICSE 2023 and SC24 that focus on large language models (LLMs) for code understanding tasks. Our goal is to understand how reproducible these research artifacts are and to present our findings visually.
-
-**Team Roles:**
-- **Aaliyah:** Experiment Engineer
-- **Arghavan:** Model Analyst
-- **Holy:** Portal Builder (That's you!)
-- **Copernic:** Presenter
-- **Iyana:** Project Lead
-
-**Hackathon Goals:**
-- Reproduce results from each of the 189 selected papers.
-- Score each paper on reproducibility factors.
-- Create a comparative scorecard for all papers.
-- Build this public-facing web portal.
-- Submit a poster summarizing methodology and findings to Gateways 2025.
-""")
+st.markdown("<h3 style='margin-bottom:0.5rem;'>Meet the Team</h3>", unsafe_allow_html=True)
+team = [
+    {
+        'name': 'Aaliyah Lockett',
+        'role': 'Experiment Engineer',
+        'github': 'https://github.com/AaliyahKam',
+        'photo': 'https://avatars.githubusercontent.com/AaliyahKam'
+    },
+    {
+        'name': 'Arghavan Noori',
+        'role': 'Model Analyst',
+        'github': 'https://github.com/arghavxn',
+        'photo': 'https://avatars.githubusercontent.com/arghavxn'
+    },
+    {
+        'name': 'Agyei Holy',
+        'role': 'Portal Builder',
+        'github': 'https://github.com/holly-agyei',
+        'photo': 'https://avatars.githubusercontent.com/holly-agyei'
+    },
+    {
+        'name': 'Iyana',
+        'role': 'Project Lead',
+        'github': 'https://github.com/iyana1127',
+        'photo': 'https://avatars.githubusercontent.com/iyana1127'
+    },
+    {
+        'name': 'Copernic Mensah',
+        'role': 'Presenter',
+        'github': 'https://github.com/notcopernicus',
+        'photo': 'https://avatars.githubusercontent.com/notcopernicus'
+    },
+]
+cols = st.columns(len(team))
+for i, member in enumerate(team):
+    with cols[i]:
+        st.image(member['photo'], width=80)
+        st.markdown(f"**{member['name']}**<br><span style='font-size:0.9em'>{member['role']}</span>", unsafe_allow_html=True)
+        if member['github']:
+            st.markdown(f"[GitHub]({member['github']})")
